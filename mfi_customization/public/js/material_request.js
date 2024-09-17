@@ -20,7 +20,14 @@ frappe.ui.form.on('Material Request', {
 	},
 	company: function (frm) {
 		assigned_to_filters(frm);
-	}
+	},
+	// onload:function(frm){
+	// 	if(frm.doc.task){
+	// 		console.log("task", task)
+	// 	}
+	// }
+	
+
 });
 
 // frappe.ui.form.on('Material Request', {

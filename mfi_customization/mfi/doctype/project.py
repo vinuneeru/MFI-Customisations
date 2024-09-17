@@ -13,8 +13,24 @@ import json
 import datetime
 from datetime import datetime, timedelta
 from frappe.model.document import Document
+from frappe.utils.background_jobs import enqueue
 
-def get_company(doc,method):
+def validate(doc,method):
+    enqueue(get_customer, queue='default', timeout=6000, event='get_customer',doc=doc)
+    enqueue(get_tech_team, queue='default', timeout=6000, event='get_tech_team',doc=doc)
+
+def after_save(doc,method):
+    enqueue(get_company, queue='default', timeout=6000, event='get_company',doc=doc)
+
+def after_insert(doc,method):
+    enqueue(get_tech_team, queue='default', timeout=6000, event='get_tech_team',doc=doc)
+
+def on_change(doc,method):
+    enqueue(get_company, queue='default', timeout=6000, event='get_company',doc=doc)
+    enqueue(get_project, queue='default', timeout=6000, event='get_project',doc=doc)
+    enqueue(get_tech_team, queue='default', timeout=6000, event='get_tech_team',doc=doc)
+
+def get_company(doc):
     if doc.company:
         usr_perm = frappe.new_doc('User Permission')
         usr_perm.allow = 'Company'
@@ -32,7 +48,7 @@ def get_company(doc,method):
                 frappe.delete_doc('User Permission', us_per.name)
             
 
-def get_customer(doc,method):
+def get_customer(doc):
     if doc.customer:
         usr_perm = frappe.new_doc('User Permission')
         usr_perm.allow = 'Customer'
@@ -78,7 +94,7 @@ def get_customer(doc,method):
                 # user.save()
 
 
-def get_project(doc,method):
+def get_project(doc):
     if doc.project_name:
         usr_perm = frappe.new_doc('User Permission')
         usr_perm.allow = 'Project'
@@ -101,7 +117,7 @@ def get_project(doc,method):
                 us_per = frappe.get_doc('User Permission',{'reference':doc.name})
                 frappe.delete_doc('User Permission', us_per.name)
 
-def get_tech_team(doc,method):
+def get_tech_team(doc):
     if doc.project_name:
         usr_perm = frappe.new_doc('User Permission')
         usr_perm.allow = 'Project'

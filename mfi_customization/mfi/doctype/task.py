@@ -13,20 +13,31 @@ from frappe.permissions import add_user_permission
 from frappe.core.doctype.communication.email import make
 from mfi_customization.mfi.doctype.project import get_customer_emails
 from mfi_customization.mfi.doctype.issue import set_company
+from frappe.utils.background_jobs import enqueue
 
 
 def validate(doc,method):
+	check_type_of_call(doc)
+	check_working_task(doc, frappe.session.user)
 	set_company(doc)
 	set_actual_time(doc)
-	send_task_completion_email(doc)
-	send_task_escalation_email(doc)
-	# machine_reading=""
 	for d in doc.get("current_reading"):
+		# frappe.log_error(f"d{d}", title = "d")
+		if d.get('reading_2') == "0":
+			frappe.throw(f"Color Reading should not be zero.")
+		elif d.get('reading') == "0":
+			frappe.throw(f"Black and White Reading should not be zero.")
 		d.total= (int(d.get('reading') or 0)  + int(d.get('reading_2') or 0))
 		# machine_reading=d.machine_reading
 		if d.idx>1:
 			frappe.throw("More than one row not allowed")
 
+	enqueue(send_task_completion_email, queue='default', timeout=6000, event='send_task_completion_email',doc=doc)
+	enqueue(send_task_escalation_email, queue='default', timeout=6000, event='send_task_escalation_email',doc=doc)
+	# send_task_completion_email(doc)
+	# send_task_escalation_email(doc)
+	# machine_reading=""
+	
 	last_reading=today()
 	#last_reading child table row will be less then 2 idx(3 row) then it will insert
 	if doc.asset and len(doc.get("last_readings"))<=3 and doc.status == 'Open':
@@ -83,12 +94,36 @@ def validate(doc,method):
 	
 	# set_escalate(doc)
 
+def check_type_of_call(doc):
+	# if doc.type_of_call == "CM":
+	exist_task = [t['name'] for t in frappe.db.get_list("Task", {'type_of_call': "PM", 'serial_no':doc.serial_no, 'status':['!=', 'Completed']},'name')]
+	# frappe.log_error(f"PM exist_task {exist_task}")
+	if len(exist_task) == 1:
+		frappe.db.set_value("Task", exist_task[0], 'status', "Cancelled")
+	elif len(exist_task) > 1:
+		for et in range(1, len(exist_task)):
+			frappe.db.set_value("Task", et, 'status', "Cancelled")
 
-
-
+def check_working_task(doc, user):
+	frappe.log_error(f"user {user} doc {doc.name} status {doc.status}",title="task user")
+	user_roles= frappe.get_roles(user)
+	frappe.log_error(f"user_roles {user_roles}",title="roles")
+	if doc.status == "Working" and "Call Coordinator" not in user_roles and "Administrator" not in user_roles  :
+		flag = True
+		frappe.log_error(f" if status working",title="working")
+		if len(doc.technician_productivity_matrix) > 0:
+			for v in doc.technician_productivity_matrix:
+				if v.material_request:
+					frappe.log_error(f" if material request",title="mr")
+					flag=False
+		if flag:
+			existing_task_list =[t['name'] for t in frappe.db.get_list('Task',{'completed_by': doc.completed_by, "status": "Working", 'escalation':0,'name':['!=', doc.name]},'name')]
+			frappe.log_error(f" existing_task_list {existing_task_list}",title="exist task")
+			if len(existing_task_list) > 0:
+				frappe.throw(f"You already working on task {existing_task_list}", title="Existed working task")
+			
 def before_insert(doc,method):
 	send_task_assignment_email(doc)
-
 
 def set_actual_time(doc):
 	if doc.completion_date_time and doc.attended_date_time:
@@ -271,18 +306,34 @@ def set_field_values(doc):
 			issue.assign_date = doc.get("assign_date")
 		issue.save(ignore_permissions=True)
 
+
+@frappe.whitelist()
+def make_material_request(source_name, target_doc=None):
+	frappe.msgprint(f"make_material_request")
+
+
 @frappe.whitelist()
 def make_material_req(source_name, target_doc=None):
+	# frappe.msgprint(f"make_material_req")
 	def set_missing_values(source, target):
-		target.company=frappe.db.get_value("Employee",{"user_id":frappe.session.user},"company")
+		# frappe.msgprint(f"set_missing_values")
+		# target.company=frappe.db.get_value("Employee",{"user_id":frappe.session.user},"company")
+		customer_name = frappe.db.get_value("Customer",{"name":source.customer},"customer_name")
+		target.company = source.company
+		target.asset_name_= source.asset_name
+		target.customer_name = customer_name
+		target.task = source.name
+
 	doclist = get_mapped_doc("Task", source_name, {
 		"Task": {
 			"doctype": "Material Request",
 			"name":"custom_task",
 			"company":"company"
+			
+			
 		}
 	}, target_doc,set_missing_values )
-
+	# frappe.msgprint(f"doclist {doclist}")
 	return doclist
 
 
@@ -361,16 +412,18 @@ def get_tech(doctype, txt, searchfield, start, page_len, filters):
 @frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
 def get_assign_user(doctype, txt, searchfield, start, page_len, filters):
+	user_list, query = [], ''
 	territory = frappe.db.get_value("User Permission", {'user':filters.get('user'), 'allow':'Territory'}, 'for_value')
 	if filters.get("type_of_call") == 'Toner':
 		user_list = [u.user for u in  frappe.db.get_all("User Permission",{'allow':'Territory', 'for_value':territory}, 'user') if "Toner Approval 1" in frappe.get_roles(u.user)]
-		query = f""" select u.name, u.full_name from `tabUser` u where u.name in {tuple(user_list)} and u.{searchfield} like "%{txt}%" """
-		return frappe.db.sql(query)
 	else:
 		user_list = [u.user for u in  frappe.db.get_all("User Permission",{'allow':'Territory', 'for_value':territory}, 'user') if "Technicians" in frappe.get_roles(u.user)]
-		query = f""" select u.name, u.full_name from `tabUser` u where u.name in {tuple(user_list)} and u.{searchfield} like "%{txt}%" """
-		return frappe.db.sql(query)
-
+	if len(user_list) > 1:
+		query = f""" select u.name, u.full_name from `tabUser` as u where u.name in {tuple(user_list)} and (u.name like '%{txt}%') """
+	elif len(user_list) == 1:
+		query = f""" select u.name, u.full_name from `tabUser` as u where u.name = '{user_list[0]}' and (u.name like '%{txt}%') """
+	return frappe.db.sql(query, debug=1)
+	
 @frappe.whitelist()
 def delete_task(name):
 	return frappe.db.sql("DELETE FROM `tabTask` WHERE name = %s", name)
@@ -490,7 +543,7 @@ def create_machine_reading(doc):
 	for d in doc.get('current_reading'):
 		if len(frappe.get_all("Machine Reading",{"task":doc.name,"project":doc.project,"asset":d.get('asset'),"reading_date":d.get('date')}))<1:
 			if doc.type_of_call =="Toner":
-				frappe.log_error('IFFFFFFFF TONER')
+				# frappe.log_error('IFFFFFFFF TONER')
 				mr=frappe.new_doc("Machine Reading")
 				mr.reading_date=d.get('date')
 				mr.asset=d.get('asset')
@@ -508,7 +561,7 @@ def create_machine_reading(doc):
 					})
 				mr.save(ignore_permissions=True)
 			else:
-				frappe.log_error('ELSE NOT TONER')
+				# frappe.log_error('ELSE NOT TONER')
 				mr=frappe.new_doc("Machine Reading")
 				mr.reading_date=d.get('date')
 				mr.asset=d.get('asset')
@@ -599,6 +652,7 @@ def set_service_records_from_task_to_issue(doc):
 
 def validate_reading(doc):
     user_roles= frappe.get_roles(frappe.session.user)
+    # frappe.log_error(f"user_roles {user_roles}", title="reading")
     curr = []
     last = []
     curr_date = []
@@ -618,7 +672,7 @@ def validate_reading(doc):
                 cur.reading_2 = doc.get('last_readings')[0].reading_2 if len(doc.last_readings)>0 else 0
     if len(curr)>0 and len(last)>0:
         print(f'\n\n\n\n\n122{curr},{last}\n\n\n\n\n')
-        frappe.log_error(f'\n\n\n\n\n122{curr},{last}\n\n\n\n\n')
+        # frappe.log_error(f'\n\n\n\n\n122{curr},{last}\n\n\n\n\n')
         if doc.permanent_machine_error != 1:
             if int(last[0])>=int(curr[0]) and int(last[0])>0 and int(curr[0])>0:
                 frappe.throw("Current Reading Must be Greater than Last Reading")
@@ -968,9 +1022,9 @@ def set_escalate(doc):
 
 def productivity_time(doc,method):
 	for i in doc.technician_productivity_matrix:
-		frappe.log_error('ewewew')
+		# frappe.log_error('ewewew')
 		if i.working and i.closed and not i.material_request:
-			frappe.log_error('diffrrd')
+			# frappe.log_error('diffrrd')
 			try:
 				closed = datetime.strptime(i.closed, '%Y-%m-%d %H:%M:%S.%f')
 			except:
@@ -990,7 +1044,7 @@ def productivity_time(doc,method):
 			i.productivity_time = productivity_time
 
 		if i.working and i.closed and i.material_request and i.material_issued and i.resume_working: 
-			frappe.log_error('diffrrd')
+			# frappe.log_error('diffrrd')
 			try:
 				closed = datetime.strptime(i.closed, '%Y-%m-%d %H:%M:%S.%f')
 			except:
@@ -1105,3 +1159,6 @@ def productivity_time(doc,method):
 # 					i.resolution_time = i.closed - datetime.strptime(i.working, '%Y-%m-%d %H:%M:%S.%f')
 # 				elif i.working and i.closed and i.material_request and i.material_issued:
 # 					i.resolution_time = (i.material_request - i.working) + (i.closed - i.material_issued)
+
+
+	

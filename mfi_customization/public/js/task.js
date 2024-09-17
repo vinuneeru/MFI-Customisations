@@ -26,14 +26,16 @@ frappe.ui.form.on('Task', {
 	},
 	status: function (frm) {
 		status_option_permision_for_technician(frm)
-		if (frm.doc.status == "Working") {
-			frappe.model.set_value("Task", frm.doc.name, "working_start_time", frappe.datetime.now_datetime());
-			frm.save()
+		// if (frm.doc.status == "Working") {
+		// 	frappe.model.set_value("Task", frm.doc.name, "working_start_time", frappe.datetime.now_datetime());
+		// 	frm.save()
 			// set_permissions_for_symptoms(frm);
-		}
+		// }
 		// transfer_data_to_issue(frm)
 		//fetch_data_material_request_item(frm)
 		if (frm.doc.status == 'Working') {
+			check_if_status_is_working_for_another_task(frm)
+			frm.set_value( "working_start_time", frappe.datetime.now_datetime());
 			let today = new Date()
 			frappe.model.set_value("Issue", frm.doc.issue, 'first_responded_on', today);
 
@@ -220,7 +222,8 @@ frappe.ui.form.on('Task', {
 				var check_machine_reading = frappe.db.get_value("Machine Reading", { 'task': frm.doc.name }, 'name', (r) => {
 					if (r.name != null) {
 						frappe.model.set_value("Task", frm.doc.name, "working_end_time", frappe.datetime.now_datetime());
-						frm.save()
+						// frm.save()
+						console.log("make mr")
 						frappe.model.open_mapped_doc({
 							method: "mfi_customization.mfi.doctype.task.make_material_req",
 							frm: me.frm
@@ -243,8 +246,8 @@ frappe.ui.form.on('Task', {
 				filters: {
 					"user": frappe.session.user,
 					"type_of_call": frm.doc.type_of_call
-				},
-				searchfield: "full_name"
+				}
+				// searchfield: "full_name"
 			};
 
 		});
@@ -412,6 +415,8 @@ frappe.ui.form.on('Task', {
 		}
 	},
 	validate: function (frm) {
+        
+
 		if(frappe.user != "Administrator" && frappe.user.has_role("Call Coordinator") == 1){
 			if(!frm.doc.escalation && frm.doc.completed_by){
 				frm.set_df_property('completed_by', 'read_only', 1);
@@ -724,6 +729,12 @@ frappe.ui.form.on('Task', {
 
 frappe.ui.form.on('Task', {
 	onload: function (frm) {
+		if ((frappe.user.has_role("Technicians") == 1 || frappe.user.has_role("Toner Approval 1") == 1) && frappe.user != "Administrator" && frm.doc.status == "Working") {
+			frm.set_df_property('raise_by_contact', "reqd", 1);
+		}
+		else{
+			frm.set_df_property('raise_by_contact', "reqd", 0);
+		}
 		status_option_permision_for_technician(frm)
 		
 	},
@@ -785,6 +796,8 @@ function set_permissions_for_symptoms(frm) {
 			frm.set_df_property('cause', "hidden", 1);
 			frm.set_df_property('customer_rating', "hidden", 1);
 			frm.set_df_property('customer_signature', "hidden", 1);
+			frm.set_df_property('raise_by_contact', "reqd", 0);
+
 			frm.set_df_property('signature', "read_only", 1);
 			frm.set_df_property('current_reading', 'hidden', 1);
 			frm.set_df_property('priority', "read_only", 1);
@@ -827,6 +840,28 @@ function filter_bassed_on_role(frm) {
 	});
 }
 
+function check_if_status_is_working_for_another_task(frm) {
+	var flag = true;
+	if ((frm.doc.technician_productivity_matrix.length) > 0){
+		$.each(frm.doc.technician_productivity_matrix, function (i, v) {
+			if(v.material_request){
+				flag=false
+			}
+		});
+
+	}
+	if (flag){
+		frappe.db.get_list('Task',{filters:{'completed_by': frm.doc.completed_by, "status": "Working", 'escalation':0,'name':['!=', frm.doc.name]},
+		fields: ['name'] }).then((r) => {
+			console.log("r",r)
+			if(r){
+				const task_list = r.map(obj => obj.name);
+				frappe.throw(__("You already working on task {0}",[task_list]))
+			}
+		})
+    }
+
+}
 
 function status_option_permision_for_technician(frm) {
 	if ((frappe.user.has_role("Technicians") == 1 || frappe.user.has_role("Toner Approval 1") == 1) && frappe.user != "Administrator") {

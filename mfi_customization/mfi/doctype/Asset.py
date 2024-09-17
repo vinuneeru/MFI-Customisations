@@ -3,9 +3,12 @@ from datetime import datetime, timedelta, date
 from dateutil import rrule
 from dateutil.relativedelta import relativedelta
 from frappe.core.doctype.user_permission.user_permission import user_permission_exists
-
+from frappe.utils.background_jobs import enqueue
 
 def after_insert(doc, method):
+    enqueue(create_or_update_serial_no, queue='default', timeout=6000, event='create_or_update_serial_no',doc=doc)
+
+def create_or_update_serial_no(doc):
     if len(frappe.get_all('Asset Serial No', {"serial_no": doc.serial_no}, ['name', 'asset'])) > 0:
         for d in frappe.get_all('Asset Serial No', {"serial_no": doc.serial_no}, ['name', 'asset']):
             if d.asset:

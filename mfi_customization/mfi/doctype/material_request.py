@@ -528,6 +528,7 @@ def set_yeild_details_on_machine_reading(doc):
 		for machine_reading in machine_reading_list:
 			machine_reading_doc = frappe.get_doc('Machine Reading', machine_reading['name'])
 			machine_reading_doc.items=[]
+			machine_reading_doc.task = doc.task
 			for i in doc.items_with_yeild:
 				reading_child = machine_reading_doc.append("items", {})
 				reading_child.item_code= i.item_code
@@ -637,22 +638,47 @@ def issue_reject(task):
 
 
 def itm_child_data_into_issue(doc):
-    Task=frappe.get_doc("Task", doc.task)
-    if Task:
-       get_issue=frappe.get_doc("Issue",Task.issue)
-       if doc.items:
-          for i in doc.items:
-              issue_itm=get_issue.append("items",{})
-              issue_itm.item_code=i.item_code
-              issue_itm.item_name=i.item_name
-              issue_itm.schedule_date = i.schedule_date
-              issue_itm.warehouse=i.warehouse
-              issue_itm.description=i.description
-              issue_itm.qty=i.qty
-              issue_itm.stock_uom=i.stock_uom
-              issue_itm.uom=i.uom
-              issue_itm.conversion_factor=i.conversion_factor
-              get_issue.save()
+	try:
+		task = frappe.get_doc("Task", doc.task)
+		if task:
+			issue = frappe.get_doc("Issue", task.issue)
+			if issue and doc.items:
+				issue_items = [{
+					"item_code": i.item_code,
+					"item_name": i.item_name,
+					"schedule_date": i.schedule_date,
+					"warehouse": i.warehouse,
+					"description": i.description,
+					"qty": i.qty,
+					"stock_uom": i.stock_uom,
+					"uom": i.uom,
+					"conversion_factor": i.conversion_factor
+				} for i in doc.items]
+				issue.extend("items", issue_items)
+				issue.save()
+	except frappe.DoesNotExistError:
+		# Handle case when Task or Issue does not exist
+		pass
+	except Exception as e:
+		# Handle other exceptions
+		frappe.log_error(f"Error in processing: {e}")
+
+    # Task=frappe.get_doc("Task", doc.task)
+    # if Task:
+    #    get_issue=frappe.get_doc("Issue",Task.issue)
+    #    if doc.items:
+    #       for i in doc.items:
+    #           issue_itm=get_issue.append("items",{})
+    #           issue_itm.item_code=i.item_code
+    #           issue_itm.item_name=i.item_name
+    #           issue_itm.schedule_date = i.schedule_date
+    #           issue_itm.warehouse=i.warehouse
+    #           issue_itm.description=i.description
+    #           issue_itm.qty=i.qty
+    #           issue_itm.stock_uom=i.stock_uom
+    #           issue_itm.uom=i.uom
+    #           issue_itm.conversion_factor=i.conversion_factor
+    #           get_issue.save()
 
 def pause_task(doc, event):
 	if doc.task and doc.material_request_type == "Material Issue":

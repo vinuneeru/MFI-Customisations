@@ -9,13 +9,15 @@
  "field_order": [
   "item",
   "asset_item",
-  "type"
+  "type",
+  "amended_from"
  ],
  "fields": [
   {
    "fieldname": "item",
    "fieldtype": "Link",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Item",
    "options": "Item"
   },
@@ -31,11 +33,21 @@
    "in_list_view": 1,
    "label": "Asset Item ",
    "options": "Item"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Compatible Items",
+   "print_hide": 1,
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
+ "is_submittable": 1,
  "links": [],
- "modified": "2022-12-05 13:39:28.856582",
+ "modified": "2024-03-13 08:24:21.696908",
  "modified_by": "Administrator",
  "module": "mfi",
  "name": "Compatible Items",
@@ -51,6 +63,7 @@
    "report": 1,
    "role": "System Manager",
    "share": 1,
+   "submit": 1,
    "write": 1
   }
  ],

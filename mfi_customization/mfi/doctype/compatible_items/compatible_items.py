@@ -6,9 +6,11 @@ from frappe.model.document import Document
 
 class CompatibleItems(Document):
 	def on_submit(self):
-		add_item_acc()
-		add_item_ton()
-	# pass
+		frappe.enqueue(add_item_acc, queue="long", timeout=3600, is_async=True, now=False,job_name='comaptible_items')
+		frappe.enqueue(add_item_ton, queue="long", timeout=3600, is_async=True, now=False,job_name='comaptible_items')
+		# add_item_acc()
+		# add_item_ton()
+		pass
 
 
 def add_item_acc():

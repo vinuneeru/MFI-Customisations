@@ -1,1 +1,2 @@
 mfi_customization.mfi.patch.share_assign_to_on_task.execute #25/6/2023
+mfi_customization.mfi.patch.compatible_items.execute #05/03/2024

@@ -139,9 +139,9 @@ doc_events = {
             ],
         "validate": "mfi_customization.mfi.doctype.material_request.set_material_issued_on_task"
     },
-    # "Machine Reading":{
-    #  "validate":"mfi_customization.mfi.doctype.machine_reading.machine_reading.validate"
-    # },
+    "Machine Reading":{
+     "validate":"mfi_customization.mfi.doctype.machine_reading.machine_reading.validate"
+    },
     "Comment":{
 		"validate":"mfi_customization.mfi.doctype.comment.comment"
 	},
@@ -159,10 +159,10 @@ doc_events = {
         "validate":["mfi_customization.mfi.doctype.employee.employee.get_territory","mfi_customization.mfi.doctype.employee.employee.get_type_of_call","mfi_customization.mfi.doctype.employee.employee.get_roles_checked","mfi_customization.mfi.doctype.employee.employee.get_type_of_call","mfi_customization.mfi.doctype.employee.employee.get_user","mfi_customization.mfi.doctype.employee.employee.get_locations","mfi_customization.mfi.doctype.employee.employee.get_segment"],
     },
     "Project":{
-        "after_save":"mfi_customization.mfi.doctype.project.get_company",
-        "validate":["mfi_customization.mfi.doctype.project.get_customer","mfi_customization.mfi.doctype.project.get_tech_team"],
-        "after_insert":"mfi_customization.mfi.doctype.project.get_tech_team",
-        "on_change":["mfi_customization.mfi.doctype.project.get_project","mfi_customization.mfi.doctype.project.get_company","mfi_customization.mfi.doctype.project.get_tech_team"]
+        "after_save":"mfi_customization.mfi.doctype.project.after_save",
+        "validate":"mfi_customization.mfi.doctype.project.validate",
+        "after_insert":"mfi_customization.mfi.doctype.project.after_insert",
+        "on_change":"mfi_customization.mfi.doctype.project.on_change"
     },
     # "Item":{
     #     "after_insert":"mfi_customization.mfi.doctype.item.validate"
