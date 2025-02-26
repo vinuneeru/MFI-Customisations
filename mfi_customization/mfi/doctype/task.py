@@ -14,6 +14,7 @@ from frappe.core.doctype.communication.email import make
 from mfi_customization.mfi.doctype.project import get_customer_emails
 from mfi_customization.mfi.doctype.issue import set_company
 from frappe.utils.background_jobs import enqueue
+from frappe.utils import getdate
 
 
 def validate(doc,method):
@@ -32,8 +33,8 @@ def validate(doc,method):
 		if d.idx>1:
 			frappe.throw("More than one row not allowed")
 
-	enqueue(send_task_completion_email, queue='default', timeout=6000, event='send_task_completion_email',doc=doc)
-	enqueue(send_task_escalation_email, queue='default', timeout=6000, event='send_task_escalation_email',doc=doc)
+	enqueue(send_task_completion_email, queue='long', timeout=6000, event='send_task_completion_email',doc=doc)
+	enqueue(send_task_escalation_email, queue='long', timeout=6000, event='send_task_escalation_email',doc=doc)
 	# send_task_completion_email(doc)
 	# send_task_escalation_email(doc)
 	# machine_reading=""
@@ -95,14 +96,32 @@ def validate(doc,method):
 	# set_escalate(doc)
 
 def check_type_of_call(doc):
-	# if doc.type_of_call == "CM":
-	exist_task = [t['name'] for t in frappe.db.get_list("Task", {'type_of_call': "PM", 'serial_no':doc.serial_no, 'status':['!=', 'Completed']},'name')]
-	# frappe.log_error(f"PM exist_task {exist_task}")
-	if len(exist_task) == 1:
-		frappe.db.set_value("Task", exist_task[0], 'status', "Cancelled")
-	elif len(exist_task) > 1:
-		for et in range(1, len(exist_task)):
-			frappe.db.set_value("Task", et, 'status', "Cancelled")
+    """
+    Checks for existing tasks with type_of_call as 'PM' and the same serial_no
+    and cancels them if they are not completed.
+    """
+    # Fetch all tasks matching the criteria
+    existing_tasks = frappe.db.get_list(
+        "Task",
+        filters={"type_of_call": "PM", "serial_no": doc.serial_no, "status": ["!=", "Completed"]},
+        fields=["name"]
+    )
+
+    # If only one task exists, update its status directly
+    if len(existing_tasks) == 1:
+        frappe.db.set_value("Task", existing_tasks[0]["name"], "status", "Cancelled")
+    elif len(existing_tasks) > 1:
+        # Batch update all tasks except the first one
+        task_names_to_cancel = [task["name"] for task in existing_tasks[1:]]
+        frappe.db.sql(
+            """
+            UPDATE `tabTask`
+            SET status = 'Cancelled'
+            WHERE name IN %s
+            """,
+            (tuple(task_names_to_cancel),)
+        )
+
 
 def check_working_task(doc, user):
 	frappe.log_error(f"user {user} doc {doc.name} status {doc.status}",title="task user")
@@ -237,24 +256,38 @@ def after_insert(doc,method):
 	# docperm.save(ignore_permissions=True)
 
 def send_task_assignment_email(task):
-	if task.completed_by:
-		assign_subject = f"""Engineer assigned to issue ticket {task.issue}"""
-		# body = f"""Task ticket no. {task.issue} has been assigned to our Engineer {task.technician_name}, kindly
-		# 			expect him/her as soon as possible"""
-		# recipients = get_customer_emails(task.project)
-		# make(subject = assign_subject,content=body, recipients=recipients,
-		# 	send_email=True, sender="erp@groupmfi.com")
+    """
+    Sends an assignment email to the appropriate recipients when a task is assigned to an engineer.
+    """
+    if not task.completed_by:
+        return
 
-		body = f"""Ticket no. {task.issue}, {task.customer_name_} has been assigned to our Engineer {task.technician_name}"""
-		recipients = frappe.db.get_value("Company", task.company, "support_email")
-		if task.type_of_call == "Toner":
-			body = f"""Ticket no. {task.issue}, {task.customer_name_} with type of call "Toner" has been assigned to our Engineer {task.technician_name}"""
-			recipients = frappe.db.get_value("Company", task.company, "toner_support_email")
+    # Construct the subject and email body
+    assign_subject = f"Engineer assigned to issue ticket {task.issue}"
+    body = (
+        f"Ticket no. {task.issue}, {task.customer_name_} has been assigned to our Engineer {task.technician_name}."
+        if task.type_of_call != "Toner"
+        else f"Ticket no. {task.issue}, {task.customer_name_} with type of call 'Toner' has been assigned to our Engineer {task.technician_name}."
+    )
 
-		make(subject = assign_subject,content=body,recipients=recipients,
-			send_email=True, sender="erp@groupmfi.com")
+    # Determine the recipients based on the type of call
+    email_field = "toner_support_email" if task.type_of_call == "Toner" else "support_email"
+    recipients = frappe.db.get_value("Company", task.company, email_field)
 
-		frappe.msgprint("Task assignment email has been sent")
+    if not recipients:
+        frappe.throw(f"Support email not configured for the company {task.company}")
+
+    # Send the email
+    make(
+        subject=assign_subject,
+        content=body,
+        recipients=recipients,
+        send_email=True,
+        sender="erp@groupmfi.com",
+    )
+
+    frappe.msgprint("Task assignment email has been sent.")
+
 
 
 def on_change(doc,method):
@@ -651,36 +684,35 @@ def set_service_records_from_task_to_issue(doc):
 	issue_doc.save(ignore_permissions=True)
 
 def validate_reading(doc):
-    user_roles= frappe.get_roles(frappe.session.user)
-    # frappe.log_error(f"user_roles {user_roles}", title="reading")
+    user_roles = frappe.get_roles(frappe.session.user)
     curr = []
     last = []
     curr_date = []
     last_date = []
+
     if "Call Coordinator" not in user_roles or "Administrator" in user_roles:
         for cur in doc.get('current_reading'):
-            print(f'\n\n\n\n\ntask{cur.get("reading")},{cur.get("reading_2")}\n\n\n\n\n')
-            cur.total=( int(cur.get('reading') or 0)  + int(cur.get('reading_2') or 0))
+            cur.total = (int(cur.get('reading') or 0) + int(cur.get('reading_2') or 0))
             curr.append(cur.total)
-            curr_date.append(cur.date)
+            curr_date.append(getdate(cur.date))  # Ensure date is a datetime.date object
             for lst in doc.get('last_readings'):
-                lst.total=( int(lst.get('reading') or 0)  + int(lst.get('reading_2') or 0))
+                lst.total = (int(lst.get('reading') or 0) + int(lst.get('reading_2') or 0))
                 last.append(lst.total)
-                last_date.append(lst.date)
+                last_date.append(getdate(lst.date))  # Ensure date is a datetime.date object
             if doc.issue_type == 'Error message':
-                cur.reading = doc.get('last_readings')[0].reading if len(doc.last_readings)>0 else 0
-                cur.reading_2 = doc.get('last_readings')[0].reading_2 if len(doc.last_readings)>0 else 0
-    if len(curr)>0 and len(last)>0:
-        print(f'\n\n\n\n\n122{curr},{last}\n\n\n\n\n')
-        # frappe.log_error(f'\n\n\n\n\n122{curr},{last}\n\n\n\n\n')
+                cur.reading = doc.get('last_readings')[0].reading if len(doc.last_readings) > 0 else 0
+                cur.reading_2 = doc.get('last_readings')[0].reading_2 if len(doc.last_readings) > 0 else 0
+
+    if len(curr) > 0 and len(last) > 0:
         if doc.permanent_machine_error != 1:
-            if int(last[0])>=int(curr[0]) and int(last[0])>0 and int(curr[0])>0:
+            if int(last[0]) >= int(curr[0]) and int(last[0]) > 0 and int(curr[0]) > 0:
                 frappe.throw("Current Reading Must be Greater than Last Reading")
 
-    if len(curr_date)>0 and len(last_date)>0:
-        if last_date[0] != today:
-            if last_date[0]>curr_date[0] and int(last[0])>0 and int(curr[0])>0:
+    if len(curr_date) > 0 and len(last_date) > 0:
+        if last_date[0] != getdate(today()):  # Ensure comparison with today's date as datetime.date
+            if last_date[0] > curr_date[0] and int(last[0]) > 0 and int(curr[0]) > 0:
                 frappe.throw("Current Reading <b>Date</b> Must be Greater than Last Reading")
+
 
 #def validate_reading(doc):
 #	for cur in doc.get('current_reading'):
@@ -710,48 +742,86 @@ def rating_validation(doc):
 
 
 def create_user_permission(doc):
-	if len(frappe.get_all("User Permission",{"allow":"Task","for_value":doc.name,"user":doc.completed_by}))==0:
-		for d in frappe.get_all("User Permission",{"allow":"Task","for_value":doc.name}):
-			frappe.delete_doc("User Permission",d.name)
-		add_user_permission("Task",doc.name,doc.completed_by)
-		add_user_permission("Issue",doc.issue,doc.completed_by)
+    """
+    Creates user permissions and DocShare records for a Task and its related Issue.
+    """
+    # Check and create User Permission for Task
+    if not frappe.db.exists("User Permission", {"allow": "Task", "for_value": doc.name, "user": doc.completed_by}):
+        # Delete existing User Permissions for this Task
+        frappe.db.delete("User Permission", {"allow": "Task", "for_value": doc.name})
+        # Add new User Permissions
+        add_user_permission("Task", doc.name, doc.completed_by)
+        if doc.issue:
+            add_user_permission("Issue", doc.issue, doc.completed_by)
 
-	for emp in frappe.get_all("Employee",{"user_id":doc.completed_by},['material_request_approver']):
-		if emp.material_request_approver:
-			for emp2 in frappe.get_all("Employee",{"name":emp.material_request_approver},['user_id']):
-				if emp2.user_id:
-					add_user_permission("Task",doc.name,emp2.user_id)
-	if 'Task' not in frappe.db.get_all('DocShare',{'user':doc.completed_by,'share_name':doc.name}, 'share_doctype', pluck='share_doctype') or doc.name not in frappe.db.get_all('DocShare',{'share_doctype':'Task','user':doc.completed_by}, 'share_name', pluck='share_name') or doc.completed_by not in frappe.db.get_all('DocShare',{'share_doctype':'Task','share_name':doc.name}, 'user', pluck='user'):
-		share = frappe.new_doc('DocShare')
-		share.share_doctype = 'Task'
-		share.share_name = doc.name
-		share.user = doc.completed_by
-		share.read = 1
-		share.write = 1
-		
-		share.save(ignore_permissions=True)
-		
-	if 'Issue' not in frappe.db.get_all('DocShare',{'user':doc.completed_by,'share_name':doc.issue}, 'share_doctype', pluck='share_doctype') or doc.issue not in frappe.db.get_all('DocShare',{'share_doctype':'Issue','user':doc.completed_by}, 'share_name', pluck='share_name') or doc.completed_by not in frappe.db.get_all('DocShare',{'share_doctype':'Issue','share_name':doc.issue}, 'user', pluck='user'):
-		share = frappe.new_doc('DocShare')
-		share.share_doctype = 'Issue'
-		share.share_name = doc.issue
-		share.user = doc.completed_by
-		share.read = 1
-		share.write = 1
-		
-		share.save(ignore_permissions=True)
+    # Fetch employees who need permissions
+    employees = frappe.get_all(
+        "Employee",
+        filters={"user_id": doc.completed_by},
+        fields=["material_request_approver"]
+    )
+
+    # Add User Permissions for material request approvers
+    approver_user_ids = [
+        emp2.user_id
+        for emp in employees if emp.material_request_approver
+        for emp2 in frappe.get_all("Employee", {"name": emp.material_request_approver}, ["user_id"])
+        if emp2.user_id
+    ]
+
+    for user_id in approver_user_ids:
+        add_user_permission("Task", doc.name, user_id)
+
+    # Create DocShare for Task
+    if not frappe.db.exists("DocShare", {"user": doc.completed_by, "share_name": doc.name, "share_doctype": "Task"}):
+        frappe.get_doc({
+            "doctype": "DocShare",
+            "share_doctype": "Task",
+            "share_name": doc.name,
+            "user": doc.completed_by,
+            "read": 1,
+            "write": 1,
+        }).insert(ignore_permissions=True)
+
+    # Create DocShare for Issue
+    if doc.issue and not frappe.db.exists("DocShare", {"user": doc.completed_by, "share_name": doc.issue, "share_doctype": "Issue"}):
+        frappe.get_doc({
+            "doctype": "DocShare",
+            "share_doctype": "Issue",
+            "share_name": doc.issue,
+            "user": doc.completed_by,
+            "read": 1,
+            "write": 1,
+        }).insert(ignore_permissions=True)
+
 
 def create_user_issue_permission(doc):
-		if len(frappe.get_all("User Permission",{"allow":"Issue","for_value":doc.issue,"user":doc.completed_by}))==0:
-			for d in frappe.get_all("User Permission",{"allow":"Issue","for_value":doc.issue}):
-				frappe.delete_doc("User Permission",d.name)
-			add_user_permission("Issue",doc.issue,doc.completed_by)
+    # Check if a User Permission for the given Issue and user already exists
+    if not frappe.db.exists("User Permission", {"allow": "Issue", "for_value": doc.issue, "user": doc.completed_by}):
+        # Delete existing User Permissions for the given Issue
+        frappe.db.delete("User Permission", {"allow": "Issue", "for_value": doc.issue})
+        # Add a new User Permission for the completed_by user
+        add_user_permission("Issue", doc.issue, doc.completed_by)
 
-		for emp in frappe.get_all("Employee",{"user_id":doc.completed_by},['material_request_approver']):
-			if emp.material_request_approver:
-				for emp2 in frappe.get_all("Employee",{"name":emp.material_request_approver},['user_id']):
-					if emp2.user_id:
-						add_user_permission("Issue",doc.issue,emp2.user_id)
+    # Fetch all related employees in one query
+    employees = frappe.get_all(
+        "Employee",
+        filters={"user_id": doc.completed_by},
+        fields=["material_request_approver"]
+    )
+
+    # Collect all user IDs of material_request_approvers
+    approver_user_ids = [
+        emp2.user_id
+        for emp in employees if emp.material_request_approver
+        for emp2 in frappe.get_all("Employee", {"name": emp.material_request_approver}, ["user_id"])
+        if emp2.user_id
+    ]
+
+    # Add User Permissions for all approver user IDs
+    for user_id in approver_user_ids:
+        add_user_permission("Issue", doc.issue, user_id)
+
 
 
 # def create_share(doc,method=None):
