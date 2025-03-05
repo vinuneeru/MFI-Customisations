@@ -1,6 +1,2 @@
-[pre_model_sync]
-# Patches added in this section will be executed before doctypes are migrated
-# Read docs to understand patches: https://frappeframework.com/docs/v14/user/en/database-migrations
-
-[post_model_sync]
-# Patches added in this section will be executed after doctypes are migrated
+mfi_customization.mfi.patch.share_assign_to_on_task.execute #25/6/2023
+mfi_customization.mfi.patch.compatible_items.execute #05/03/2024

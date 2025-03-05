@@ -1,0 +1,31 @@
+{
+ "attach_print": 0,
+ "channel": "Email",
+ "condition": "",
+ "creation": "2023-07-03 09:04:12.407631",
+ "days_in_advance": 0,
+ "docstatus": 0,
+ "doctype": "Notification",
+ "document_type": "Task",
+ "enabled": 0,
+ "event": "New",
+ "idx": 0,
+ "is_standard": 1,
+ "message": "{% raw %}\n<p>Task Ticket Number: {{ doc.issue }}has assigned to you</p>\n\nCustomer: {{ doc.customer_name_ }}\n</ul>{% endraw %}",
+ "modified": "2023-07-03 09:12:47.397459",
+ "modified_by": "Administrator",
+ "module": "mfi",
+ "name": "N5",
+ "owner": "Administrator",
+ "print_format": "",
+ "recipients": [
+  {
+   "receiver_by_document_field": "completed_by"
+  }
+ ],
+ "send_system_notification": 0,
+ "send_to_all_assignees": 0,
+ "sender": "Helpdesk email",
+ "sender_email": "erp@groupmfi.com",
+ "subject": "Task is Assigned to you"
+}

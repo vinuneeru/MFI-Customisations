@@ -1,7 +1,7 @@
-## Mfi Customization
+## mfi
 
-mfi_customization
+mfi
 
 #### License
 
-mit
+MIT
