@@ -468,7 +468,7 @@ def set_field_values(doc):
 
 @frappe.whitelist()
 def make_material_request(source_name, target_doc=None):
-    frappe.msgprint(f"make_material_request")
+    frappe.msgprint("make_material_request")
 
 
 @frappe.whitelist()
@@ -902,7 +902,7 @@ def set_service_records_from_task_to_issue(doc):
                         ]["productivity_time"],
                     },
                 )
-            except:
+            except Exception as e:
                 issue_doc.append(
                     "technician_productivity_matrix",
                     {
@@ -933,6 +933,7 @@ def set_service_records_from_task_to_issue(doc):
                         else "",
                     },
                 )
+                frappe.log_error(_(e.__class__.__name__), e)
 
     if len(doc.get("task_escalation_list")) > 0:
         if len(issue_doc.get("task_escalation_list")) < len(
@@ -1263,9 +1264,9 @@ def get_locationlist(doctype, txt, searchfield, start, page_len, filters):
     ]
     for p in project_list:
         location_list = [
-            [l.location]
-            for l in frappe.db.get_list("Asset", {"project": p}, "location")
-            if [l.location] not in location_list
+            [loc.location]
+            for loc in frappe.db.get_list("Asset", {"project": p}, "location")
+            if [loc.location] not in location_list
         ]
     return location_list
 
@@ -1346,9 +1347,9 @@ def validate_current_reading(doc):
         and len(doc.get("current_reading")) == 0
         or (
             frappe.db.get_value("Asset Readings", {"parent": doc.name}, "reading")
-            == None
+            is None
             and frappe.db.get_value("Asset Readings", {"parent": doc.name}, "reading_2")
-            == None
+            is None
         )
         and doc.type_of_call != "Toner"
     ):
@@ -1524,18 +1525,21 @@ def productivity_time(doc, method):
             # frappe.log_error('diffrrd')
             try:
                 closed = datetime.strptime(i.closed, "%Y-%m-%d %H:%M:%S.%f")
-            except:
+            except Exception as e:
                 closed = i.closed
+                frappe.log_error(_(e.__class__.__name__), e)
             try:
                 working = datetime.strptime(i.working, "%Y-%m-%d %H:%M:%S.%f")
-            except:
+            except Exception as e:
                 working = i.working
+                frappe.log_error(_(e.__class__.__name__), e)
             try:
                 difference = closed - working
-            except:
+            except Exception as e:
                 difference = closed - datetime.strptime(
                     i.working, "%Y-%m-%d %H:%M:%S.%f"
                 )
+                frappe.log_error(_(e.__class__.__name__), e)
             seconds_in_day = 24 * 60 * 60
             productivity_time = str(difference)
             separator = ":"
@@ -1552,24 +1556,29 @@ def productivity_time(doc, method):
             # frappe.log_error('diffrrd')
             try:
                 closed = datetime.strptime(i.closed, "%Y-%m-%d %H:%M:%S.%f")
-            except:
+            except Exception as e:
                 closed = i.closed
+                frappe.log_error(_(e.__class__.__name__), e)
             try:
                 working = datetime.strptime(i.working, "%Y-%m-%d %H:%M:%S.%f")
-            except:
+            except Exception as e:
                 working = i.working
+                frappe.log_error(_(e.__class__.__name__), e)
             try:
                 req = datetime.strptime(i.material_request, "%Y-%m-%d %H:%M:%S.%f")
-            except:
+            except Exception as e:
                 req = i.material_request
+                frappe.log_error(_(e.__class__.__name__), e)
             try:
                 iss = datetime.strptime(i.material_issued, "%Y-%m-%d %H:%M:%S.%f")
-            except:
+            except Exception as e:
                 iss = i.material_issued
+                frappe.log_error(_(e.__class__.__name__), e)
             try:
                 resume = datetime.strptime(i.resume_working, "%Y-%m-%d %H:%M:%S.%f")
-            except:
+            except Exception as e:
                 resume = i.resume_working
+                frappe.log_error(_(e.__class__.__name__), e)
             difference = (req - working) + (iss - req) + (closed - resume)
             seconds_in_day = 24 * 60 * 60
             productivity_time = str(difference)
@@ -1610,20 +1619,24 @@ def productivity_time(doc, method):
         ):
             try:
                 working = datetime.strptime(i.working, "%Y-%m-%d %H:%M:%S.%f")
-            except:
+            except Exception as e:
                 working = i.working
+                frappe.log_error(_(e.__class__.__name__), e)
             try:
                 escalate = datetime.strptime(doc.escalation_time, "%Y-%m-%d %H:%M:%S")
-            except:
+            except Exception as e:
                 escalate = doc.escalation_time
+                frappe.log_error(_(e.__class__.__name__), e)
             try:
                 req = datetime.strptime(i.material_request, "%Y-%m-%d %H:%M:%S.%f")
-            except:
+            except Exception as e:
                 req = i.material_request
+                frappe.log_error(_(e.__class__.__name__), e)
             try:
                 iss = datetime.strptime(i.material_issued, "%Y-%m-%d %H:%M:%S.%f")
-            except:
+            except Exception as e:
                 iss = i.material_issued
+                frappe.log_error(_(e.__class__.__name__), e)
             difference = (req - working) + (iss - req) + (escalate - iss)
             seconds_in_day = 24 * 60 * 60
             productivity_time = str(difference)
@@ -1640,20 +1653,24 @@ def productivity_time(doc, method):
         ):
             try:
                 closed = datetime.strptime(i.closed, "%Y-%m-%d %H:%M:%S.%f")
-            except:
+            except Exception as e:
                 closed = i.closed
+                frappe.log_error(_(e.__class__.__name__), e)
             try:
                 resume = datetime.strptime(i.resume_working, "%Y-%m-%d %H:%M:%S.%f")
-            except:
+            except Exception as e:
                 resume = i.resume_working
+                frappe.log_error(_(e.__class__.__name__), e)
             try:
                 req = datetime.strptime(i.material_request, "%Y-%m-%d %H:%M:%S.%f")
-            except:
+            except Exception as e:
                 req = i.material_request
+                frappe.log_error(_(e.__class__.__name__), e)
             try:
                 iss = datetime.strptime(i.material_issued, "%Y-%m-%d %H:%M:%S.%f")
-            except:
+            except Exception as e:
                 iss = i.material_issued
+                frappe.log_error(_(e.__class__.__name__), e)
             difference = (iss - req) + (closed - resume)
             seconds_in_day = 24 * 60 * 60
             productivity_time = str(difference)
@@ -1670,14 +1687,16 @@ def productivity_time(doc, method):
         ):
             try:
                 closed = datetime.strptime(i.closed, "%Y-%m-%d %H:%M:%S.%f")
-            except:
+            except Exception as e:
                 closed = i.closed
+                frappe.log_error(_(e.__class__.__name__), e)
             try:
                 resume = datetime.strptime(i.resume_working, "%Y-%m-%d %H:%M:%S.%f")
-            except:
+            except Exception as e:
                 resume = i.resume_working
+                frappe.log_error(_(e.__class__.__name__), e)
             difference = closed - resume
-            seconds_in_day = 24 * 60 * 60
+            # seconds_in_day = 24 * 60 * 60
             productivity_time = str(difference)
             separator = ":"
             productivity_time = productivity_time.rsplit(separator, 1)[0]
