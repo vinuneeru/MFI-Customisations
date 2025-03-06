@@ -7,13 +7,11 @@
   "modified": "2022-07-29 14:12:20.883605",
   "name": "Hold Calls Approver",
   "override_status": 0,
-  "parent": null,
-  "parentfield": null,
-  "parenttype": null,
   "send_email_alert": 1,
   "states": [
    {
     "allow_edit": "User",
+    "avoid_status_override": 0,
     "doc_status": "1",
     "is_optional_state": 0,
     "message": null,
@@ -23,10 +21,12 @@
     "parenttype": "Workflow",
     "state": "Approved",
     "update_field": "status",
-    "update_value": "Hold"
+    "update_value": "Hold",
+    "workflow_builder_id": null
    },
    {
     "allow_edit": "User",
+    "avoid_status_override": 0,
     "doc_status": "0",
     "is_optional_state": 0,
     "message": null,
@@ -36,7 +36,8 @@
     "parenttype": "Workflow",
     "state": "Rejected",
     "update_field": "status",
-    "update_value": "Hold"
+    "update_value": "Hold",
+    "workflow_builder_id": null
    }
   ],
   "transitions": [
@@ -49,7 +50,8 @@
     "parent": "Hold Calls Approver",
     "parentfield": "transitions",
     "parenttype": "Workflow",
-    "state": "Approved"
+    "state": "Approved",
+    "workflow_builder_id": null
    },
    {
     "action": "Reject",
@@ -60,9 +62,11 @@
     "parent": "Hold Calls Approver",
     "parentfield": "transitions",
     "parenttype": "Workflow",
-    "state": "Rejected"
+    "state": "Rejected",
+    "workflow_builder_id": null
    }
   ],
+  "workflow_data": null,
   "workflow_name": "Hold Calls Approver",
   "workflow_state_field": "workflow_state"
  }
