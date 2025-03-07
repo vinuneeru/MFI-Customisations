@@ -3,4 +3,9 @@
 *.egg-info
 *.swp
 tags
-mfi_customization/docs/current
+node_modules
+__pycache__
+test.py
+build
+*.cpython-312-x86_64-linux-gnu.so
+*.c
